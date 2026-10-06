@@ -1,0 +1,490 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>FX option strategies</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=Newsreader:opsz,wght@6..72,400;6..72,600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#E9EDF1; --panel:#F8FAFC; --ink:#15202E; --muted:#556375; --rule:#CBD3DD; --sel:#DAE3EE;
+  --line:#1B4F8A; --mtm:#7A8AA0; --profit:#1E7A55; --loss:#B23A3A; --strike:#9C6410; --spot:#15202E;
+  --profit-fill:rgba(30,122,85,.13); --loss-fill:rgba(178,58,58,.11);
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0E1620; --panel:#15202C; --ink:#E3E9F0; --muted:#97A6B8; --rule:#2B3949; --sel:#20303F;
+    --line:#86B9EE; --mtm:#7F90A6; --profit:#52C690; --loss:#EF7570; --strike:#E0AE4C; --spot:#E3E9F0;
+    --profit-fill:rgba(82,198,144,.14); --loss-fill:rgba(239,117,112,.13);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0E1620; --panel:#15202C; --ink:#E3E9F0; --muted:#97A6B8; --rule:#2B3949; --sel:#20303F;
+  --line:#86B9EE; --mtm:#7F90A6; --profit:#52C690; --loss:#EF7570; --strike:#E0AE4C; --spot:#E3E9F0;
+  --profit-fill:rgba(82,198,144,.14); --loss-fill:rgba(239,117,112,.13);
+}
+*,*::before,*::after{box-sizing:inherit}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:400 15px/1.55 "IBM Plex Sans",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+.page{max-width:1180px;margin:0 auto;padding:28px 20px 48px}
+header.top{margin-bottom:22px}
+header.top h1{font:600 clamp(28px,4vw,40px)/1.1 "Newsreader",Georgia,"Times New Roman",serif;margin:0 0 6px;letter-spacing:-.01em}
+header.top p{margin:0;color:var(--muted);max-width:68ch}
+.app{display:grid;grid-template-columns:230px minmax(0,1fr);gap:20px;align-items:start}
+nav.list{position:sticky;top:calc(env(safe-area-inset-top,0px) + 16px);display:flex;flex-direction:column;border-left:1px solid var(--rule)}
+nav.list button{all:unset;cursor:pointer;display:flex;justify-content:space-between;gap:8px;padding:7px 12px;margin-left:-1px;border-left:3px solid transparent;color:var(--muted)}
+nav.list button:hover{color:var(--ink)}
+nav.list button[aria-current="true"]{color:var(--ink);border-left-color:var(--line);background:var(--sel);font-weight:500}
+nav.list button:focus-visible{outline:2px solid var(--line);outline-offset:-2px}
+nav.list .pair{font-size:12px;opacity:.75}
+main{background:var(--panel);border:1px solid var(--rule);border-radius:6px;padding:24px clamp(16px,3vw,32px) 28px;min-width:0}
+.head{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:flex-end;gap:12px 24px}
+.head h2{font:600 clamp(26px,3.4vw,34px)/1.1 "Newsreader",Georgia,serif;margin:0}
+.head .id{color:var(--muted);font-size:13px;margin-top:4px}
+.mkt{color:var(--muted);font-size:13px;text-align:right}
+.mkt b{color:var(--ink);font-weight:600}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;margin:18px 0 6px;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--rule);border-radius:5px;overflow:hidden}
+.seg button{all:unset;cursor:pointer;padding:5px 12px;font-size:13px;color:var(--muted)}
+.seg button+button{border-left:1px solid var(--rule)}
+.seg button[aria-pressed="true"]{background:var(--line);color:var(--panel);font-weight:500}
+.seg button:focus-visible{outline:2px solid var(--line);outline-offset:-2px}
+.readout{min-height:1.6em;font-size:13px;color:var(--muted);margin:12px 0 4px}
+.readout b{color:var(--ink);font-weight:600}
+.pos{color:var(--profit)}.neg{color:var(--loss)}
+#chart{width:100%;position:relative;touch-action:pan-y}
+#chart svg{display:block;width:100%;height:auto;overflow:visible}
+.ax text{fill:var(--muted);font-size:11px}
+.grid{stroke:var(--rule);stroke-width:1}
+.zero{stroke:var(--muted);stroke-width:1}
+.kline{stroke:var(--strike);stroke-dasharray:3 4;stroke-width:1.2}
+.klab{fill:var(--strike);font-size:11px;font-weight:600}
+.sline{stroke:var(--spot);stroke-width:1;opacity:.45}
+.slab{fill:var(--muted);font-size:11px}
+.exp{fill:none;stroke:var(--line);stroke-width:2.4;stroke-linejoin:round}
+.mtm{fill:none;stroke:var(--mtm);stroke-width:1.6;stroke-dasharray:6 5}
+.pf{fill:var(--profit-fill)}.lf{fill:var(--loss-fill)}
+.be{fill:var(--panel);stroke:var(--ink);stroke-width:1.5}
+.guide{stroke:var(--ink);stroke-width:1;opacity:.35}
+.dot-e{fill:var(--line)}.dot-m{fill:var(--mtm)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 18px;font-size:12px;color:var(--muted);margin-top:6px}
+.legend i{display:inline-block;width:22px;height:0;border-top:2.4px solid var(--line);vertical-align:middle;margin-right:6px}
+.legend i.d{border-top:1.6px dashed var(--mtm)}
+.legend i.k{border-top:1.2px dashed var(--strike)}
+.slider{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;margin:16px 0 4px;font-size:13px;color:var(--muted)}
+.slider input{flex:1 1 220px;accent-color:var(--line)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--rule);border:1px solid var(--rule);border-radius:5px;overflow:hidden;margin:18px 0 22px}
+.stats div{background:var(--panel);padding:10px 12px}
+.stats dt{font-size:12px;color:var(--muted)}
+.stats dd{margin:2px 0 0;font-weight:600;font-size:15px}
+.stats small{display:block;font-weight:400;color:var(--muted);font-size:12px}
+.copy{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:24px}
+.copy h3{font:600 17px/1.3 "Newsreader",Georgia,serif;margin:0 0 6px}
+.copy p{margin:0 0 10px;max-width:62ch}
+.example{border-left:3px solid var(--strike);padding-left:14px}
+.tbl{overflow-x:auto;margin-top:22px}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:520px}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--rule)}
+th{color:var(--muted);font-weight:500}
+td.num,th.num{text-align:right}
+.ov h2{font:600 clamp(26px,3.4vw,34px)/1.1 "Newsreader",Georgia,serif;margin:0 0 6px}
+.ov>p{color:var(--muted);margin:0 0 8px;max-width:70ch;font-size:14px}
+.ov h3{font:600 18px/1.3 "Newsreader",Georgia,serif;margin:24px 0 10px;padding-bottom:6px;border-bottom:1px solid var(--rule)}
+.ov h3 span{font:400 13px "IBM Plex Sans",system-ui,sans-serif;color:var(--muted);margin-left:8px}
+.ov-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.card{all:unset;cursor:pointer;display:flex;flex-direction:column;gap:4px;border:1px solid var(--rule);border-radius:5px;padding:12px 12px 10px;background:var(--panel)}
+.card:hover{border-color:var(--line)}
+.card:focus-visible{outline:2px solid var(--line);outline-offset:1px}
+.card .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.card .t b{font-weight:600}
+.card .t span{font-size:12px;color:var(--muted)}
+.card svg{display:block;width:100%;height:auto;margin:4px 0 2px}
+.card p{margin:0;font-size:13px;color:var(--muted);line-height:1.45}
+.card .prem{font-size:12px;color:var(--ink)}
+nav.list .ovbtn{margin-bottom:8px}
+[hidden]{display:none!important}
+footer{color:var(--muted);font-size:12px;margin-top:22px;max-width:80ch}
+@media (max-width:820px){
+  .app{grid-template-columns:1fr}
+  nav.list{position:static;flex-direction:row;overflow-x:auto;border-left:0;border-bottom:1px solid var(--rule);gap:2px;-webkit-overflow-scrolling:touch}
+  nav.list button{border-left:0;border-bottom:3px solid transparent;margin:0 0 -1px;white-space:nowrap;padding:8px 10px}
+  nav.list button[aria-current="true"]{border-bottom-color:var(--line)}
+  nav.list .pair{display:none}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .copy{grid-template-columns:1fr}
+  .mkt{text-align:left}
+}
+@media (prefers-reduced-motion:no-preference){ .exp,.mtm{transition:none} }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="top">
+    <h1>FX option strategies</h1>
+    <p>Pick a structure to see its payoff, priced with Garman-Kohlhagen on illustrative market levels. P&amp;L is in the quote currency for 10 million of the base currency per leg, net of premium.</p>
+  </header>
+  <div class="app">
+    <nav class="list" id="nav" aria-label="Strategies"></nav>
+    <main id="ovw" class="ov" hidden></main>
+    <main id="main" aria-live="polite">
+      <div class="head">
+        <div><h2 id="name"></h2><div class="id" id="sid"></div></div>
+        <div class="mkt" id="mkt"></div>
+      </div>
+      <div class="controls">
+        <div class="seg" id="variants" role="group" aria-label="Variant"></div>
+        <div class="seg" id="dir" role="group" aria-label="Direction">
+          <button data-d="1" aria-pressed="true">Long</button>
+          <button data-d="-1" aria-pressed="false">Short</button>
+        </div>
+      </div>
+      <div class="readout" id="readout"></div>
+      <div id="chart"></div>
+      <div class="legend" id="legend"></div>
+      <div class="slider">
+        <label for="days" id="dayslab"></label>
+        <input type="range" id="days" min="0" max="30" value="0" step="1">
+      </div>
+      <dl class="stats" id="stats"></dl>
+      <div class="copy">
+        <div><h3>How it works</h3><p id="desc"></p></div>
+        <div class="example"><h3>FX example</h3><p id="example"></p></div>
+      </div>
+      <div class="tbl"><table id="legs"></table></div>
+    </main>
+  </div>
+  <footer>Spot, interest rates and volatilities are illustrative round numbers, not live market data. Volatility is flat across strikes (no smile), and premiums are not discounted, so figures show shape and order of magnitude rather than tradeable prices.</footer>
+</div>
+
+<script>
+const PAIRS={
+  EURUSD:{spot:1.0850,rd:.045,rf:.025,vol:.075,dec:4,pip:.0001,ccy:'USD',base:'EUR'},
+  USDJPY:{spot:148.00,rd:.005,rf:.045,vol:.10,dec:2,pip:.01,ccy:'JPY',base:'USD'},
+  GBPUSD:{spot:1.2700,rd:.045,rf:.04,vol:.08,dec:4,pip:.0001,ccy:'USD',base:'GBP'},
+  AUDUSD:{spot:0.6600,rd:.045,rf:.04,vol:.10,dec:4,pip:.0001,ccy:'USD',base:'AUD'},
+  EURGBP:{spot:0.8550,rd:.04,rf:.025,vol:.055,dec:4,pip:.0001,ccy:'GBP',base:'EUR'},
+  USDCAD:{spot:1.3700,rd:.03,rf:.045,vol:.06,dec:4,pip:.0001,ccy:'CAD',base:'USD'},
+  USDCHF:{spot:0.8800,rd:.005,rf:.045,vol:.08,dec:4,pip:.0001,ccy:'CHF',base:'USD'}
+};
+const M1={T:30/365,tenor:'1M'}, M3={T:91/365,tenor:'3M'};
+const L=(q,t,K,e)=>({q,t,K,T:e.T,tenor:e.tenor});
+const NOTIONAL=10e6;
+
+const STRATS=[
+ {id:'outright',name:'Outright',variants:[
+  {label:'Call',pair:'EURUSD',legs:[L(1,'C',1.0900,M1)],
+   desc:'A single vanilla option. The buyer pays a premium for the right, not the obligation, to exchange at the strike. The loss is capped at the premium; the upside is open-ended.',
+   example:'A US importer worried about a stronger euro buys a 1M EURUSD 1.0900 EUR call on EUR 10m. Above 1.0900 plus the premium the option pays off; below it, the cost is only the premium.'},
+  {label:'Put',pair:'EURUSD',legs:[L(1,'P',1.0800,M1)],
+   desc:'A single vanilla option. The buyer pays a premium for the right, not the obligation, to exchange at the strike. The loss is capped at the premium.',
+   example:'A US fund holding euro bonds buys a 1M EURUSD 1.0800 EUR put to protect against a weaker euro without giving up gains if EUR rallies.'}]},
+ {id:'straddle',name:'Straddle',variants:[
+  {label:'ATM',pair:'USDJPY',legs:[L(1,'C',148.00,M1),L(1,'P',148.00,M1)],
+   desc:'Buy a call and a put at the same strike and expiry. This is a pure long-volatility position: it profits from a large move in either direction and loses the combined premium if spot finishes at the strike.',
+   example:'Ahead of a Bank of Japan meeting, a trader buys a 1M USDJPY 148.00 straddle, expecting a big move but unsure of its direction.'}]},
+ {id:'strangle',name:'Strangle',variants:[
+  {label:'25-delta style',pair:'GBPUSD',legs:[L(1,'P',1.2500,M1),L(1,'C',1.2900,M1)],
+   desc:'Like a straddle but with out-of-the-money strikes on each side. It costs less, but spot has to travel further before it pays.',
+   example:'Into UK inflation data and a Bank of England decision, buy a 1M GBPUSD 1.2500 put and a 1.2900 call.'}]},
+ {id:'risk_reversal',name:'Risk reversal',variants:[
+  {label:'Bearish',side:-1,pair:'AUDUSD',legs:[L(1,'P',0.6400,M3),L(-1,'C',0.6850,M3)],
+   desc:'Buy an out-of-the-money option on one side and sell one on the other side. It is often close to zero cost and expresses a directional view plus a view on skew. In FX, the 25-delta risk reversal is also how the market quotes that skew.',
+   example:'Bearish on the Australian dollar, a trader buys a 3M AUDUSD 0.6400 put and sells a 0.6850 call to pay for it.'}]},
+ {id:'synthetic_forward',name:'Synthetic forward',variants:[
+  {label:'Long',pair:'EURUSD',legs:[L(1,'C',1.0850,M3),L(-1,'P',1.0850,M3)],
+   desc:'A long call plus a short put at the same strike gives a straight-line payoff, exactly like a forward. Breakeven lands near the market forward rather than the strike, because the net premium carries the interest-rate differential.',
+   example:'Buying the 3M EURUSD 1.0850 call and selling the 1.0850 put is economically the same as buying EUR 10m forward at about 1.0904.'}]},
+ {id:'spread',name:'Spread / ratio',variants:[
+  {label:'Call spread',pair:'EURUSD',legs:[L(1,'C',1.0900,M1),L(-1,'C',1.1050,M1)],
+   desc:'Buy one option and sell a further out-of-the-money option of the same type and expiry. It is cheaper than the outright, and the gain is capped at the distance between strikes.',
+   example:'Mildly bullish EURUSD: buy the 1M 1.0900 call and sell the 1.1050 call, cutting the premium in exchange for a ceiling on the payout.'},
+  {label:'1x2 ratio',pair:'EURUSD',legs:[L(1,'C',1.0900,M1),L(-2,'C',1.1050,M1)],
+   desc:'Buy one option and sell two or more further out. Often zero cost or a credit, with the best result at the short strike, but the extra short option leaves unlimited risk beyond it.',
+   example:'A 1M EURUSD 1.0900/1.1050 1x2 call ratio targets a steady move to about 1.1050, not a breakout.'}]},
+ {id:'calendar_spread',name:'Calendar spread',variants:[
+  {label:'Call calendar',pair:'USDJPY',legs:[L(-1,'C',148.00,M1),L(1,'C',148.00,M3)],
+   desc:'Same strike and type, different expiries: sell the near date, buy the far date. It earns money if spot stays near the strike while the short option decays and the long option keeps its time value. The solid line shows value at the near expiry.',
+   example:'Sell a 1M and buy a 3M USDJPY 148.00 call, collecting fast near-term decay while keeping longer-dated exposure.'}]},
+ {id:'diagonal',name:'Diagonal',variants:[
+  {label:'Call diagonal',pair:'EURGBP',legs:[L(1,'C',0.8550,M3),L(-1,'C',0.8650,M1)],
+   desc:'A calendar with different strikes: buy the longer-dated option and sell a shorter-dated one further out of the money. It adds a directional tilt to the time-decay trade.',
+   example:'Buy a 3M EURGBP 0.8550 call and sell a 1M 0.8650 call against it, profiting most if EURGBP grinds up to around 0.8650 by the first expiry.'}]},
+ {id:'butterfly',name:'Butterfly',variants:[
+  {label:'Call fly',pair:'EURUSD',legs:[L(1,'C',1.0750,M1),L(-2,'C',1.0850,M1),L(1,'C',1.0950,M1)],
+   desc:'Buy a low and a high strike and sell two at the middle strike. A cheap, defined-risk bet that spot finishes near the middle strike.',
+   example:'A 1M EURUSD 1.0750/1.0850/1.0950 call butterfly positions for a quiet month with spot pinned around current levels.'}]},
+ {id:'ladder',name:'Ladder',variants:[
+  {label:'Call ladder',pair:'USDCAD',legs:[L(1,'C',1.3750,M1),L(-1,'C',1.3900,M1),L(-1,'C',1.4050,M1)],
+   desc:'One option type, three strikes, one expiry: one strike on one side, the next two on the other. Here that means buying the lowest strike and selling the next two. It is cheap or a credit, with open-ended risk past the top strike.',
+   example:'A 1M USDCAD call ladder buys 1.3750 and sells 1.3900 and 1.4050. It works if USDCAD drifts higher, but a sharp spike above 1.4050 turns into losses.'}]},
+ {id:'seagull',name:'Seagull',variants:[
+  {label:'Importer hedge',pair:'EURUSD',legs:[L(-1,'P',1.0600,M3),L(1,'C',1.0950,M3),L(-1,'C',1.1250,M3)],
+   desc:'Three legs: a call spread (or put spread) paid for by selling an option on the other side. A classic corporate hedge that gives protection over a band at low or zero cost, with exposure if spot moves sharply through the sold option.',
+   example:'A US company paying EUR in three months buys a EURUSD 1.0950/1.1250 call spread and sells a 1.0600 put. It is protected between 1.0950 and 1.1250, but below 1.0600 it is committed to buying euros at worse than market.'}]},
+ {id:'iron_condor',name:'Iron condor / butterfly',variants:[
+  {label:'Iron condor',side:-1,pair:'USDCHF',legs:[L(1,'P',0.8550,M1),L(-1,'P',0.8650,M1),L(-1,'C',0.8950,M1),L(1,'C',0.9050,M1)],
+   desc:'Sell an out-of-the-money put spread and an out-of-the-money call spread. It collects premium while spot stays between the short strikes, and the long wings cap the loss.',
+   example:'Expecting USDCHF to range-trade, sell the 1M 0.8650/0.8550 put spread and the 0.8950/0.9050 call spread.'},
+  {label:'Iron butterfly',side:-1,pair:'USDCHF',legs:[L(1,'P',0.8650,M1),L(-1,'P',0.8800,M1),L(-1,'C',0.8800,M1),L(1,'C',0.8950,M1)],
+   desc:'Sell an at-the-money straddle and buy protective wings. It brings in more premium than a condor but has a narrower profit zone.',
+   example:'Sell the 1M USDCHF 0.8800 straddle and buy the 0.8650 put and 0.8950 call so the loss is capped if the range breaks.'}]}
+];
+
+const GROUPS=[
+ {name:'Directional',note:'views on where spot goes',items:[['outright',0],['outright',1],['risk_reversal',0],['synthetic_forward',0],['spread',0],['spread',1],['ladder',0],['seagull',0]]},
+ {name:'Volatility',note:'views on how far spot moves',items:[['straddle',0],['strangle',0],['butterfly',0],['iron_condor',0],['iron_condor',1]]},
+ {name:'Time',note:'views on decay between expiries',items:[['calendar_spread',0],['diagonal',0]]}
+];
+const SHORT={
+ 'outright|Call':'Pay premium for upside above the strike; the loss is capped.',
+ 'outright|Put':'Pay premium for protection below the strike.',
+ 'straddle|ATM':'Long volatility at one strike; needs a big move either way.',
+ 'strangle|25-delta style':'Cheaper long volatility with OTM strikes; needs a bigger move.',
+ 'risk_reversal|Bearish':'Buy one wing, sell the other; directional and near zero cost.',
+ 'synthetic_forward|Long':'Call minus put at one strike; linear, like a forward.',
+ 'spread|Call spread':'Cheaper upside, capped at the second strike.',
+ 'spread|1x2 ratio':'Low cost and best at the short strike, with open risk beyond it.',
+ 'calendar_spread|Call calendar':'Sell near, buy far; earns decay if spot stays near the strike.',
+ 'diagonal|Call diagonal':'A calendar with a directional tilt.',
+ 'butterfly|Call fly':'Cheap bet that spot finishes at the middle strike.',
+ 'ladder|Call ladder':'Buy one strike, sell the next two; open risk past the top.',
+ 'seagull|Importer hedge':'Call spread financed by a sold put; hedges a band.',
+ 'iron_condor|Iron condor':'Sell a range between two spreads; loss is capped.',
+ 'iron_condor|Iron butterfly':'Short ATM straddle with wings; more premium, narrower range.'
+};
+
+/* ---------- pricing ---------- */
+function ncdf(x){const t=1/(1+0.2316419*Math.abs(x)),d=0.3989422804*Math.exp(-x*x/2);
+  const p=d*t*(0.3193815+t*(-0.3565638+t*(1.781478+t*(-1.821256+t*1.330274))));return x>0?1-p:p}
+function gk(type,S,K,T,p){
+  if(T<=1e-9) return type==='C'?Math.max(S-K,0):Math.max(K-S,0);
+  const v=p.vol,sq=v*Math.sqrt(T),d1=(Math.log(S/K)+(p.rd-p.rf+v*v/2)*T)/sq,d2=d1-sq;
+  const dd=Math.exp(-p.rd*T),df=Math.exp(-p.rf*T);
+  return type==='C'?S*df*ncdf(d1)-K*dd*ncdf(d2):K*dd*ncdf(-d2)-S*df*ncdf(-d1)}
+
+/* ---------- formatting ---------- */
+const cfmt=new Intl.NumberFormat('en',{notation:'compact',maximumFractionDigits:1});
+const money=(v,ccy,sign)=>{const s=v<0?'−':(sign&&v>0?'+':'');return `${ccy} ${s}${cfmt.format(Math.abs(v))}`};
+const cls=v=>v>0.5?'pos':v<-0.5?'neg':'';
+
+/* ---------- state ---------- */
+const state={si:0,vi:0,dir:1,days:0,view:'overview'};
+let ctx=null;
+const $=s=>document.querySelector(s);
+
+function build(){ctx=makeCtx(state.si,state.vi,state.dir)}
+function makeCtx(si,vi,dir){
+  const st=STRATS[si],v=st.variants[vi],p=PAIRS[v.pair];
+  const legs=v.legs.map(l=>({...l,q:l.q*dir,prem:gk(l.t,p.spot,l.K,l.T,p)}));
+  const Tmin=Math.min(...legs.map(l=>l.T)),Tmax=Math.max(...legs.map(l=>l.T));
+  const f=(S,t)=>legs.reduce((a,l)=>a+l.q*NOTIONAL*(gk(l.t,S,l.K,Math.max(l.T-t,0),p)-l.prem),0);
+  const Ks=legs.map(l=>l.K);
+  const dist=Math.max(...Ks.map(K=>Math.abs(K-p.spot)));
+  const half=Math.max(1.7*p.vol*Math.sqrt(Tmax)*p.spot,dist*1.45);
+  const tenorMin=legs.find(l=>l.T===Tmin).tenor;
+  return {st,v,p,legs,Tmin,Tmax,f,range:[p.spot-half,p.spot+half],tenorMin};
+}
+
+function stats(){
+  const {f,p,Tmin,legs,range}=ctx;
+  const g=S=>f(S,Tmin);
+  const net=legs.reduce((a,l)=>a+l.q*NOTIONAL*l.prem,0);
+  const netPips=legs.reduce((a,l)=>a+l.q*l.prem,0)/p.pip;
+  const n=2400,lo=p.spot*0.002,hi=p.spot*2.5;
+  let mx=-Infinity,mn=Infinity,imx=0,imn=0;
+  for(let i=0;i<=n;i++){const S=lo+(hi-lo)*i/n,y=g(S);if(y>mx){mx=y;imx=i}if(y<mn){mn=y;imn=i}}
+  const slope=(g(p.spot*3)-g(p.spot*2.5))/(NOTIONAL*p.spot*0.5);
+  const upUnl=slope>0.05, dnUnl=slope<-0.05;
+  const atZero=(i)=>i===0;
+  // breakevens in visible range
+  const be=[];const m=800;let prevS=range[0],prevY=g(prevS);
+  for(let i=1;i<=m;i++){const S=range[0]+(range[1]-range[0])*i/m,y=g(S);
+    if((prevY<0&&y>=0)||(prevY>0&&y<=0)){const r=prevY/(prevY-y);be.push(prevS+(S-prevS)*r)}prevS=S;prevY=y}
+  return {net,netPips,mx,mn,upUnl,dnUnl,mxZero:atZero(imx),mnZero:atZero(imn),be};
+}
+
+/* ---------- nav ---------- */
+function renderNav(){
+  const nav=$('#nav');nav.innerHTML='';
+  const ob=document.createElement('button');ob.className='ovbtn';
+  ob.innerHTML='<span>All strategies</span>';
+  ob.setAttribute('aria-current',state.view==='overview'?'true':'false');
+  ob.onclick=()=>showOverview();
+  ob.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowRight'){e.preventDefault();select(0,true)}};
+  nav.appendChild(ob);
+  STRATS.forEach((s,i)=>{
+    const b=document.createElement('button');
+    b.innerHTML=`<span>${s.name}</span><span class="pair">${s.variants[0].pair}</span>`;
+    b.setAttribute('aria-current',state.view==='detail'&&i===state.si?'true':'false');
+    b.onclick=()=>select(i);
+    b.onkeydown=e=>{if(e.key==='ArrowDown'||e.key==='ArrowRight'){e.preventDefault();select(Math.min(STRATS.length-1,i+1),true)}
+      if(e.key==='ArrowUp'||e.key==='ArrowLeft'){e.preventDefault();i===0?showOverview(true):select(i-1,true)}};
+    nav.appendChild(b);
+  });
+}
+function select(i,focus,vi=0){
+  state.view='detail';$('#ovw').hidden=true;$('#main').hidden=false;
+  state.si=i;state.vi=vi;state.days=0;state.dir=1;renderNav();renderAll();
+  const b=$('#nav').children[i+1];
+  if(focus)b.focus();
+  b.scrollIntoView({block:'nearest',inline:'nearest'});
+}
+
+/* ---------- main panel ---------- */
+function renderAll(){
+  build();
+  const {st,v,p,legs,Tmin,tenorMin}=ctx;
+  $('#name').textContent=st.name;
+  $('#sid').textContent=STRATS[state.si].id==='spread'?'spread / spread_ratio':STRATS[state.si].id==='iron_condor'?'iron_condor / iron_butterfly':st.id;
+  $('#mkt').innerHTML=`<b>${v.pair}</b> spot ${p.spot.toFixed(p.dec)}<br>vol ${(p.vol*100).toFixed(1)}%, ${p.ccy} rate ${(p.rd*100).toFixed(1)}%, ${p.base} rate ${(p.rf*100).toFixed(1)}%`;
+  const vb=$('#variants');vb.innerHTML='';vb.style.display=st.variants.length>1?'':'none';
+  st.variants.forEach((vv,i)=>{const b=document.createElement('button');b.textContent=vv.label;
+    b.setAttribute('aria-pressed',i===state.vi?'true':'false');b.onclick=()=>{state.vi=i;state.days=0;state.dir=1;renderAll()};vb.appendChild(b)});
+  const base=v.side||1;document.querySelectorAll('#dir button').forEach(b=>b.setAttribute('aria-pressed',+b.dataset.d===state.dir*base?'true':'false'));
+  $('#desc').textContent=v.desc;$('#example').textContent=v.example;
+  const maxD=Math.round(Tmin*365);const sl=$('#days');sl.max=maxD;state.days=Math.min(state.days,maxD);sl.value=state.days;
+  $('#dayslab').textContent=`Dashed line: value after ${state.days} of ${maxD} days`;
+  $('#legend').innerHTML=`<span><i></i>At ${tenorMin} expiry${ctx.Tmax>Tmin?' (later leg still has time value)':''}</span><span><i class="d"></i>After ${state.days} days</span><span><i class="k"></i>Strike</span>`;
+  // stats
+  const s=stats();
+  const prem=s.net>=0?`Paid ${money(s.net,p.ccy)}`:`Received ${money(-s.net,p.ccy)}`;
+  const mxTxt=s.upUnl?'Unlimited':money(s.mx,p.ccy,true)+(s.mxZero?'<small>if spot falls to zero</small>':'');
+  const mnTxt=s.dnUnl?'Unlimited':money(s.mn,p.ccy,true)+(s.mnZero?'<small>if spot falls to zero</small>':'');
+  const beTxt=s.be.length?s.be.map(x=>x.toFixed(p.dec)).join(', '):'None in view';
+  $('#stats').innerHTML=`
+   <div><dt>Net premium</dt><dd>${prem}<small>${Math.abs(s.netPips).toFixed(p.dec===2?0:0)} ${p.pip===0.01?'JPY pips':'pips'} on 10m</small></dd></div>
+   <div><dt>Max profit at ${tenorMin}</dt><dd class="${s.upUnl?'pos':cls(s.mx)}">${mxTxt}</dd></div>
+   <div><dt>Max loss at ${tenorMin}</dt><dd class="${s.dnUnl?'neg':cls(s.mn)}">${mnTxt}</dd></div>
+   <div><dt>Breakeven${s.be.length===1?'':'s'}</dt><dd>${beTxt}</dd></div>`;
+  // legs table
+  let rows=`<thead><tr><th>Leg</th><th>Option</th><th class="num">Strike</th><th>Expiry</th><th class="num">Premium (pips)</th><th class="num">Cash</th></tr></thead><tbody>`;
+  legs.forEach(l=>{const side=l.q>0?'Buy':'Sell',amt=Math.abs(l.q)*10;
+    rows+=`<tr><td>${side} ${amt}m ${p.base}</td><td>${p.base} ${l.t==='C'?'call':'put'} / ${p.ccy} ${l.t==='C'?'put':'call'}</td><td class="num">${l.K.toFixed(p.dec)}</td><td>${l.tenor}</td><td class="num">${(l.prem/p.pip).toFixed(1)}</td><td class="num ${l.q>0?'neg':'pos'}">${money(-l.q*NOTIONAL*l.prem,p.ccy,true)}</td></tr>`});
+  rows+='</tbody>';$('#legs').innerHTML=rows;
+  drawChart();
+}
+
+/* ---------- overview ---------- */
+function showOverview(focus){
+  state.view='overview';$('#main').hidden=true;$('#ovw').hidden=false;
+  renderNav();renderOverview();
+  if(focus)$('#nav').children[0].focus();
+  window.scrollTo({top:0});
+}
+function miniSvg(c){
+  const W=240,H=120,m=8,{f,Tmin,range,p,legs}=c,[x0,x1]=range,n=120;
+  const xs=Array.from({length:n+1},(_,i)=>x0+(x1-x0)*i/n),ys=xs.map(S=>f(S,Tmin));
+  let lo=Math.min(0,...ys),hi=Math.max(0,...ys);const pad=(hi-lo)*0.1||1;lo-=pad;hi+=pad;
+  const X=S=>m+(S-x0)/(x1-x0)*(W-2*m),Y=v=>m+(hi-v)/(hi-lo)*(H-2*m);
+  const d=ys.map((y,i)=>(i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(y).toFixed(1)).join('');
+  const area=d+`L${X(x1)} ${Y(0)}L${X(x0)} ${Y(0)}Z`;
+  const id=c.st.id+c.v.label.replace(/\W/g,'');
+  const ks=[...new Set(legs.map(l=>l.K))].map(K=>`<line class="kline" x1="${X(K)}" x2="${X(K)}" y1="${m}" y2="${H-m}"/>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" aria-hidden="true">
+    <defs><clipPath id="u-${id}"><rect x="0" y="0" width="${W}" height="${Y(0)}"/></clipPath><clipPath id="d-${id}"><rect x="0" y="${Y(0)}" width="${W}" height="${H}"/></clipPath></defs>
+    <path class="pf" d="${area}" clip-path="url(#u-${id})"/><path class="lf" d="${area}" clip-path="url(#d-${id})"/>
+    <line class="zero" x1="${m}" x2="${W-m}" y1="${Y(0)}" y2="${Y(0)}"/>${ks}
+    <line class="sline" x1="${X(p.spot)}" x2="${X(p.spot)}" y1="${m}" y2="${H-m}"/>
+    <path class="exp" d="${d}" style="stroke-width:2"/></svg>`;
+}
+function renderOverview(){
+  const el=$('#ovw');
+  let h=`<h2>All strategies</h2><p>Payoff at expiry for each structure in the direction described (iron condor, iron butterfly and the bearish risk reversal are shown short), net of premium. Each chart has its own scale. Dashed amber lines are strikes and the grey line is spot; calendar and diagonal show value at the first expiry. Select a card for the full chart and details.</p>`;
+  GROUPS.forEach(g=>{
+    h+=`<h3>${g.name}<span>${g.note}</span></h3><div class="ov-grid">`;
+    g.items.forEach(([id,vi])=>{
+      const si=STRATS.findIndex(s=>s.id===id),c=makeCtx(si,vi,1),p=c.p;
+      const net=c.legs.reduce((a,l)=>a+l.q*l.prem,0)/p.pip;
+      const title=c.st.variants.length>1?`${c.st.name.split(' / ')[0]==='Spread'&&vi===1?'Ratio spread':c.st.name.includes('/')?c.v.label:c.st.name+' '+c.v.label.toLowerCase()}`:c.st.name;
+      h+=`<button class="card" data-si="${si}" data-vi="${vi}" aria-label="Open ${title}">
+        <div class="t"><b>${title}</b><span>${c.v.pair}</span></div>
+        ${miniSvg(c)}
+        <p>${SHORT[id+'|'+c.v.label]}</p>
+        <div class="prem">${net>=0?'Pays':'Receives'} ${Math.abs(net).toFixed(0)} pips</div></button>`;
+    });
+    h+='</div>';
+  });
+  el.innerHTML=h;
+  el.querySelectorAll('.card').forEach(b=>b.onclick=()=>{select(+b.dataset.si,false,+b.dataset.vi);window.scrollTo({top:0})});
+}
+
+/* ---------- chart ---------- */
+function niceTicks(a,b,n){const step0=(b-a)/n,mag=10**Math.floor(Math.log10(step0)),r=step0/mag;
+  const step=(r<1.5?1:r<3?2:r<7?5:10)*mag,out=[];for(let v=Math.ceil(a/step)*step;v<=b+step*1e-9;v+=step)out.push(+v.toFixed(10));return out}
+
+let geo=null;
+function drawChart(){
+  const wrap=$('#chart');const W=Math.max(300,wrap.clientWidth),H=W<560?290:370;
+  const m={l:W<560?50:62,r:12,t:26,b:30};
+  const {f,p,range,legs,Tmin}=ctx;const tN=Math.min(state.days/365,Tmin);
+  const [x0,x1]=range,n=260;
+  const xs=Array.from({length:n+1},(_,i)=>x0+(x1-x0)*i/n);
+  const ye=xs.map(S=>f(S,Tmin)),ym=xs.map(S=>f(S,tN));
+  let lo=Math.min(0,...ye,...ym),hi=Math.max(0,...ye,...ym);const pad=(hi-lo)*0.08||1;lo-=pad;hi+=pad;
+  const X=S=>m.l+(S-x0)/(x1-x0)*(W-m.l-m.r),Y=v=>m.t+(hi-v)/(hi-lo)*(H-m.t-m.b);
+  geo={X,Y,m,W,H,x0,x1,tN};
+  const pathOf=ys=>ys.map((y,i)=>(i?'L':'M')+X(xs[i]).toFixed(1)+' '+Y(y).toFixed(1)).join('');
+  const expPath=pathOf(ye);
+  const area=expPath+`L${X(x1).toFixed(1)} ${Y(0).toFixed(1)}L${X(x0).toFixed(1)} ${Y(0).toFixed(1)}Z`;
+  const yt=niceTicks(lo,hi,5),xt=niceTicks(x0,x1,W<560?4:7);
+  let g='';
+  yt.forEach(v=>{g+=`<line class="grid" x1="${m.l}" x2="${W-m.r}" y1="${Y(v)}" y2="${Y(v)}"/><text x="${m.l-8}" y="${Y(v)+4}" text-anchor="end">${v<0?'−':''}${cfmt.format(Math.abs(v))}</text>`});
+  let xa='';xt.forEach(v=>{xa+=`<text x="${X(v)}" y="${H-m.b+18}" text-anchor="middle">${v.toFixed(p.dec)}</text>`});
+  const Ks=[...new Set(legs.map(l=>l.K))];
+  let ks='';Ks.forEach(K=>{ks+=`<line class="kline" x1="${X(K)}" x2="${X(K)}" y1="${m.t}" y2="${H-m.b}"/><text class="klab" x="${X(K)}" y="${m.t-8}" text-anchor="middle">${K.toFixed(p.dec)}</text>`});
+  const sx=X(p.spot);
+  const s=stats();let bes='';s.be.forEach(b=>{bes+=`<circle class="be" cx="${X(b)}" cy="${Y(0)}" r="4"><title>Breakeven ${b.toFixed(p.dec)}</title></circle>`});
+  wrap.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Payoff chart for ${ctx.st.name}">
+    <defs>
+      <clipPath id="cp-up"><rect x="0" y="0" width="${W}" height="${Y(0)}"/></clipPath>
+      <clipPath id="cp-dn"><rect x="0" y="${Y(0)}" width="${W}" height="${H}"/></clipPath>
+    </defs>
+    <g class="ax">${g}${xa}</g>
+    <path class="pf" d="${area}" clip-path="url(#cp-up)"/>
+    <path class="lf" d="${area}" clip-path="url(#cp-dn)"/>
+    <line class="zero" x1="${m.l}" x2="${W-m.r}" y1="${Y(0)}" y2="${Y(0)}"/>
+    ${ks}
+    <line class="sline" x1="${sx}" x2="${sx}" y1="${m.t}" y2="${H-m.b}"/>
+    <text class="slab" x="${sx+4}" y="${H-m.b-6}">spot</text>
+    <path class="mtm" d="${pathOf(ym)}"/>
+    <path class="exp" d="${expPath}"/>
+    ${bes}
+    <g id="hover" style="display:none"><line class="guide" id="hg" y1="${m.t}" y2="${H-m.b}"/><circle class="dot-m" id="hm" r="3.5"/><circle class="dot-e" id="he" r="4.5"/></g>
+    <rect id="hit" x="${m.l}" y="${m.t}" width="${W-m.l-m.r}" height="${H-m.t-m.b}" fill="transparent"/>
+  </svg>`;
+  const hit=$('#hit');
+  const move=e=>{const r=hit.getBoundingClientRect();const fx=(e.clientX-r.left)/r.width;
+    const S=x0+(x1-x0)*Math.min(1,Math.max(0,fx));hover(S)};
+  hit.addEventListener('pointermove',move);hit.addEventListener('pointerdown',move);
+  hit.addEventListener('pointerleave',()=>{$('#hover').style.display='none';hover(null)});
+  hover(null);
+}
+function hover(S){
+  const {p,f,Tmin,tenorMin}=ctx,ro=$('#readout');
+  if(S==null){ro.innerHTML=`Move across the chart to read P&amp;L at any spot level.`;return}
+  const e=f(S,Tmin),mm=f(S,geo.tN),{X,Y}=geo;
+  $('#hover').style.display='';
+  $('#hg').setAttribute('x1',X(S));$('#hg').setAttribute('x2',X(S));
+  $('#he').setAttribute('cx',X(S));$('#he').setAttribute('cy',Y(e));
+  $('#hm').setAttribute('cx',X(S));$('#hm').setAttribute('cy',Y(mm));
+  ro.innerHTML=`At <b>${S.toFixed(p.dec)}</b>: at ${tenorMin} expiry <b class="${cls(e)}">${money(e,p.ccy,true)}</b>, after ${state.days} days <b class="${cls(mm)}">${money(mm,p.ccy,true)}</b>`;
+}
+
+/* ---------- events ---------- */
+document.querySelectorAll('#dir button').forEach(b=>b.onclick=()=>{state.dir=+b.dataset.d*(STRATS[state.si].variants[state.vi].side||1);renderAll()});
+$('#days').addEventListener('input',e=>{state.days=+e.target.value;
+  $('#dayslab').textContent=`Dashed line: value after ${state.days} of ${e.target.max} days`;
+  $('#legend').querySelectorAll('span')[1].innerHTML=`<i class="d"></i>After ${state.days} days`;
+  drawChart()});
+let rz;new ResizeObserver(()=>{clearTimeout(rz);rz=setTimeout(()=>ctx&&state.view==='detail'&&drawChart(),60)}).observe($('#chart'));
+renderNav();showOverview();
+</script>
+</body>
+</html>
